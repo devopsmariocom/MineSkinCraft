@@ -41,9 +41,56 @@ function createPart(name, x, y, z, w, h, d, color) {
   canvas.height = textureSize;
   const ctx = canvas.getContext('2d');
 
+  // Determine grid size based on part type
+  let gridWidth, gridHeight;
+  switch (name) {
+    case "hlava":
+      gridWidth = 8;
+      gridHeight = 8;
+      break;
+    case "telo":
+      gridWidth = 8;
+      gridHeight = 12;
+      break;
+    case "rukaL":
+    case "rukaP":
+    case "nohaL":
+    case "nohaP":
+      gridWidth = 4;
+      gridHeight = 12;
+      break;
+    default:
+      gridWidth = 8;
+      gridHeight = 8;
+  }
+
+  // Calculate cell size
+  const cellWidth = textureSize / gridWidth;
+  const cellHeight = textureSize / gridHeight;
+
   // Fill with the base color
   ctx.fillStyle = savedColor || `#${color.toString(16).padStart(6, '0')}`;
   ctx.fillRect(0, 0, textureSize, textureSize);
+
+  // Draw grid lines to help with pixel editing
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+  ctx.lineWidth = 1;
+
+  // Draw vertical grid lines
+  for (let i = 1; i < gridWidth; i++) {
+    ctx.beginPath();
+    ctx.moveTo(i * cellWidth, 0);
+    ctx.lineTo(i * cellWidth, textureSize);
+    ctx.stroke();
+  }
+
+  // Draw horizontal grid lines
+  for (let i = 1; i < gridHeight; i++) {
+    ctx.beginPath();
+    ctx.moveTo(0, i * cellHeight);
+    ctx.lineTo(textureSize, i * cellHeight);
+    ctx.stroke();
+  }
 
   // Create texture from canvas
   const texture = new THREE.CanvasTexture(canvas);
@@ -64,7 +111,9 @@ function createPart(name, x, y, z, w, h, d, color) {
     canvas: canvas,
     context: ctx,
     texture: texture,
-    baseColor: savedColor ? new THREE.Color(savedColor) : new THREE.Color(color)
+    baseColor: savedColor ? new THREE.Color(savedColor) : new THREE.Color(color),
+    gridWidth: gridWidth,
+    gridHeight: gridHeight
   };
 
   scene.add(mesh);
@@ -116,23 +165,54 @@ function paintPixelOnModel(mesh, intersect, color) {
   const ctx = mesh.userData.context;
   const texture = mesh.userData.texture;
 
-  // Convert UV coordinates to pixel coordinates
-  const x = Math.floor(uv.x * canvas.width);
-  const y = Math.floor((1 - uv.y) * canvas.height);
+  // Get grid size based on the part type
+  let gridWidth, gridHeight;
 
-  // Draw a pixel at the intersection point
+  switch (mesh.name) {
+    case "hlava":
+      gridWidth = 8;
+      gridHeight = 8;
+      break;
+    case "telo":
+      gridWidth = 8;
+      gridHeight = 12;
+      break;
+    case "rukaL":
+    case "rukaP":
+    case "nohaL":
+    case "nohaP":
+      gridWidth = 4;
+      gridHeight = 12;
+      break;
+    default:
+      gridWidth = 8;
+      gridHeight = 8;
+  }
+
+  // Calculate the size of each grid cell in the texture
+  const cellWidth = canvas.width / gridWidth;
+  const cellHeight = canvas.height / gridHeight;
+
+  // Convert UV coordinates to grid coordinates
+  const gridX = Math.floor(uv.x * gridWidth);
+  const gridY = Math.floor((1 - uv.y) * gridHeight);
+
+  // Calculate the pixel position in the texture
+  const pixelX = gridX * cellWidth;
+  const pixelY = gridY * cellHeight;
+
+  // Draw a filled rectangle for the grid cell
   ctx.fillStyle = color;
-
-  // Draw a circle with the current brush size
-  ctx.beginPath();
-  ctx.arc(x, y, currentBrushSize, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillRect(pixelX, pixelY, cellWidth, cellHeight);
 
   // Update the texture
   texture.needsUpdate = true;
 
   // Reset the template since we've made changes
   lastTemplateDataURL = null;
+
+  // For debugging - show which grid cell was painted
+  console.log(`Painted grid cell [${gridX}, ${gridY}] on ${mesh.name}`);
 }
 
 // Handle mouse events for pixel painting
@@ -197,8 +277,39 @@ window.addEventListener('click', (event) => {
       const ctx = selectedMesh.userData.context;
       const texture = selectedMesh.userData.texture;
 
+      // Get grid dimensions from userData
+      const gridWidth = selectedMesh.userData.gridWidth || 8;
+      const gridHeight = selectedMesh.userData.gridHeight || 8;
+      const cellWidth = canvas.width / gridWidth;
+      const cellHeight = canvas.height / gridHeight;
+
+      // Clear the canvas
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Fill with the new color
       ctx.fillStyle = colorValue;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Redraw the grid lines
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+      ctx.lineWidth = 1;
+
+      // Draw vertical grid lines
+      for (let i = 1; i < gridWidth; i++) {
+        ctx.beginPath();
+        ctx.moveTo(i * cellWidth, 0);
+        ctx.lineTo(i * cellWidth, canvas.height);
+        ctx.stroke();
+      }
+
+      // Draw horizontal grid lines
+      for (let i = 1; i < gridHeight; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, i * cellHeight);
+        ctx.lineTo(canvas.width, i * cellHeight);
+        ctx.stroke();
+      }
+
       texture.needsUpdate = true;
 
       // Store the color
@@ -296,46 +407,81 @@ function generateSkinTemplate() {
     const sourceCanvas = mesh.userData.canvas;
     const sourceCtx = sourceCanvas.getContext('2d');
 
-    // Get a portion of the texture based on the face index
-    // This is a simplified approach - in a real implementation, you'd map UV coordinates properly
-    const faceWidth = sourceCanvas.width / 3;
-    const faceHeight = sourceCanvas.height / 2;
-    const sourceX = (faceIndex % 3) * faceWidth;
-    const sourceY = Math.floor(faceIndex / 3) * faceHeight;
+    // Get grid dimensions from userData
+    const gridWidth = mesh.userData.gridWidth || 8;
+    const gridHeight = mesh.userData.gridHeight || 8;
 
-    // Get the image data for this face
-    const imageData = sourceCtx.getImageData(sourceX, sourceY, faceWidth, faceHeight);
+    // Calculate the size of each grid cell in the source texture
+    const cellWidth = sourceCanvas.width / gridWidth;
+    const cellHeight = sourceCanvas.height / gridHeight;
 
-    // Create a temporary canvas to scale the face
+    // Create a temporary canvas for the face
     const tempCanvas = document.createElement('canvas');
     tempCanvas.width = width;
     tempCanvas.height = height;
     const tempCtx = tempCanvas.getContext('2d');
 
-    // Create a temporary ImageData object
-    const tempImageData = tempCtx.createImageData(width, height);
+    // Map the face index to the appropriate grid cells
+    // This is a simplified mapping - in a real implementation, you'd use proper UV mapping
+    let startGridX = 0;
+    let startGridY = 0;
+    let faceGridWidth = width;
+    let faceGridHeight = height;
 
-    // Simple scaling algorithm
-    for (let y = 0; y < height; y++) {
-      for (let x = 0; x < width; x++) {
-        const sourceX = Math.floor(x * faceWidth / width);
-        const sourceY = Math.floor(y * faceHeight / height);
+    // For simplicity, we'll just use different parts of the texture for different faces
+    // In a real implementation, you'd map the 3D model's UV coordinates properly
+    switch (faceIndex) {
+      case 0: // Front face
+        startGridX = 0;
+        startGridY = 0;
+        break;
+      case 1: // Top face
+        startGridX = 0;
+        startGridY = Math.floor(gridHeight / 3);
+        break;
+      case 2: // Right side
+        startGridX = Math.floor(gridWidth / 3);
+        startGridY = 0;
+        break;
+      case 3: // Bottom face
+        startGridX = 0;
+        startGridY = Math.floor(gridHeight * 2 / 3);
+        break;
+      case 4: // Back face
+        startGridX = Math.floor(gridWidth * 2 / 3);
+        startGridY = 0;
+        break;
+      case 5: // Left side
+        startGridX = Math.floor(gridWidth / 3);
+        startGridY = Math.floor(gridHeight / 3);
+        break;
+    }
 
-        const sourceIndex = (sourceY * faceWidth + sourceX) * 4;
-        const targetIndex = (y * width + x) * 4;
+    // Draw each grid cell to the appropriate position in the output
+    for (let gridY = 0; gridY < faceGridHeight; gridY++) {
+      for (let gridX = 0; gridX < faceGridWidth; gridX++) {
+        // Get the color from the source grid cell
+        const sourceX = (startGridX + gridX) % gridWidth;
+        const sourceY = (startGridY + gridY) % gridHeight;
 
-        tempImageData.data[targetIndex] = imageData.data[sourceIndex];
-        tempImageData.data[targetIndex + 1] = imageData.data[sourceIndex + 1];
-        tempImageData.data[targetIndex + 2] = imageData.data[sourceIndex + 2];
-        tempImageData.data[targetIndex + 3] = imageData.data[sourceIndex + 3];
+        const pixelX = sourceX * cellWidth;
+        const pixelY = sourceY * cellHeight;
+
+        // Get the color at this grid cell
+        const imageData = sourceCtx.getImageData(
+          pixelX + cellWidth / 2,
+          pixelY + cellHeight / 2,
+          1, 1
+        );
+
+        // Set the color in the output
+        tempCtx.fillStyle = `rgba(${imageData.data[0]}, ${imageData.data[1]}, ${imageData.data[2]}, ${imageData.data[3] / 255})`;
+        tempCtx.fillRect(gridX, gridY, 1, 1);
       }
     }
 
-    // Put the scaled image data on the temporary canvas
-    tempCtx.putImageData(tempImageData, 0, 0);
-
     // Draw the temporary canvas onto the main canvas
-    ctx.drawImage(tempCanvas, x, y);
+    ctx.drawImage(tempCanvas, x, y, width, height);
   }
 
   // Head - front face (8x8 pixels)
