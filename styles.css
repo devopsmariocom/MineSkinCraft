@@ -97,6 +97,28 @@ button.active {
   background-color: #e64a19;
 }
 
+#rotationControls {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  max-width: 120px;
+  justify-content: center;
+}
+
+#rotationControls button {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: #2196F3;
+}
+
+#rotationControls button:hover {
+  background-color: #0b7dda;
+}
+
 input[type="color"] {
   cursor: pointer;
   width: 40px;

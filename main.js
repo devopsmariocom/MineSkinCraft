@@ -4,6 +4,7 @@ import { PixelEditor } from './pixelEditor.js';
 
 // Scene setup
 const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xe0e0e0); // Světle šedé pozadí pro lepší viditelnost postavy
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -14,6 +15,7 @@ document.body.appendChild(renderer.domElement);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.05;
+controls.enabled = true; // Explicitly enable controls by default (color mode)
 
 // UI elements
 const colorPicker = document.getElementById('colorPicker');
@@ -139,12 +141,27 @@ createPart("nohaL", -0.25, -0.5, 0, 0.5, 1.5, 0.5, 0x000000);
 createPart("nohaP", 0.25, -0.5, 0, 0.5, 1.5, 0.5, 0x000000);
 
 // Lighting
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(5, 5, 5).normalize();
-scene.add(light);
+// Přední světlo
+const frontLight = new THREE.DirectionalLight(0xffffff, 1);
+frontLight.position.set(5, 5, 5).normalize();
+scene.add(frontLight);
+
+// Zadní světlo pro lepší viditelnost zezadu
+const backLight = new THREE.DirectionalLight(0xffffff, 0.8);
+backLight.position.set(-5, 5, -5).normalize();
+scene.add(backLight);
+
+// Boční světla pro lepší viditelnost ze stran
+const leftLight = new THREE.DirectionalLight(0xffffff, 0.5);
+leftLight.position.set(-5, 0, 0).normalize();
+scene.add(leftLight);
+
+const rightLight = new THREE.DirectionalLight(0xffffff, 0.5);
+rightLight.position.set(5, 0, 0).normalize();
+scene.add(rightLight);
 
 // Add ambient light to better see the model
-const ambientLight = new THREE.AmbientLight(0x404040, 0.5);
+const ambientLight = new THREE.AmbientLight(0x404040, 0.7);
 scene.add(ambientLight);
 
 camera.position.z = 5;
@@ -198,6 +215,28 @@ function paintPixelOnModel(mesh, intersect, color) {
   const cellWidth = canvas.width / gridWidth;
   const cellHeight = canvas.height / gridHeight;
 
+  // Determine which face of the cube was clicked using the face normal
+  let faceIndex = -1;
+  if (intersect.face) {
+    // Get the normal vector of the face
+    const normal = intersect.face.normal.clone();
+    // Transform the normal to world space
+    normal.transformDirection(mesh.matrixWorld);
+
+    // Determine which face was clicked based on the normal direction
+    // The normals point outward from the cube faces
+    if (Math.abs(normal.x) > Math.abs(normal.y) && Math.abs(normal.x) > Math.abs(normal.z)) {
+      // X-axis face (left or right)
+      faceIndex = normal.x > 0 ? 0 : 1; // 0 = right face, 1 = left face
+    } else if (Math.abs(normal.y) > Math.abs(normal.x) && Math.abs(normal.y) > Math.abs(normal.z)) {
+      // Y-axis face (top or bottom)
+      faceIndex = normal.y > 0 ? 2 : 3; // 2 = top face, 3 = bottom face
+    } else {
+      // Z-axis face (front or back)
+      faceIndex = normal.z > 0 ? 4 : 5; // 4 = front face, 5 = back face
+    }
+  }
+
   // Convert UV coordinates to grid coordinates
   const gridX = Math.floor(uv.x * gridWidth);
   const gridY = Math.floor((1 - uv.y) * gridHeight);
@@ -212,13 +251,94 @@ function paintPixelOnModel(mesh, intersect, color) {
   // Use crisp edges for pixel-perfect rendering
   ctx.imageSmoothingEnabled = false;
 
-  // Draw a filled rectangle for the grid cell with pixel-perfect edges
-  ctx.fillRect(
-    Math.floor(pixelX),
-    Math.floor(pixelY),
-    Math.floor(cellWidth),
-    Math.floor(cellHeight)
-  );
+  // For all mesh parts, we'll use face-specific painting
+  if (faceIndex >= 0) {
+    // Define texture coordinates for the specific face
+    let textureX = pixelX;
+    let textureY = pixelY;
+
+    // Store the original pixel data
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+    // Draw the pixel at the calculated position
+    ctx.fillRect(
+      Math.floor(textureX),
+      Math.floor(textureY),
+      Math.floor(cellWidth),
+      Math.floor(cellHeight)
+    );
+
+    // For limbs (arms and legs), we need special handling to paint only on specific faces
+    if (mesh.name === "rukaL" || mesh.name === "rukaP" || mesh.name === "nohaL" || mesh.name === "nohaP") {
+      // Create a unique identifier for this face based on the face index and grid position
+      // This will help us track which pixels belong to which face
+      if (!mesh.userData.facePixels) {
+        mesh.userData.facePixels = {};
+      }
+
+      // Create a key for this specific grid cell
+      const cellKey = `${gridX},${gridY}`;
+
+      // If this cell wasn't previously painted on any face, initialize it
+      if (!mesh.userData.facePixels[cellKey]) {
+        mesh.userData.facePixels[cellKey] = {};
+      }
+
+      // Store which face this cell was painted on
+      mesh.userData.facePixels[cellKey][faceIndex] = true;
+
+      // Now, we'll only keep the pixels that were painted on the current face
+      // and restore the original pixels for all other faces
+
+      // Get the updated pixel data
+      const updatedImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      // Restore the original image
+      ctx.putImageData(imageData, 0, 0);
+
+      // For each grid cell that has been painted
+      for (const cellKeyIter in mesh.userData.facePixels) {
+        // Parse the grid coordinates
+        const [cellGridX, cellGridY] = cellKeyIter.split(',').map(Number);
+
+        // Calculate the pixel position for this cell
+        const cellPixelX = cellGridX * cellWidth;
+        const cellPixelY = cellGridY * cellHeight;
+
+        // For each face that this cell has been painted on
+        for (const facePainted in mesh.userData.facePixels[cellKeyIter]) {
+          // Only draw if this is the face we're currently painting on
+          if (parseInt(facePainted) === faceIndex) {
+            // Apply the current color to this cell
+            ctx.fillStyle = color;
+            ctx.fillRect(
+              Math.floor(cellPixelX),
+              Math.floor(cellPixelY),
+              Math.floor(cellWidth),
+              Math.floor(cellHeight)
+            );
+          }
+        }
+      }
+    } else {
+      // For head and body, we'll still paint only on the specific face
+      // but we don't need to track individual faces as precisely
+      ctx.fillRect(
+        Math.floor(pixelX),
+        Math.floor(pixelY),
+        Math.floor(cellWidth),
+        Math.floor(cellHeight)
+      );
+    }
+  } else {
+    // If no face was detected (shouldn't happen), fall back to original behavior
+    ctx.fillRect(
+      Math.floor(pixelX),
+      Math.floor(pixelY),
+      Math.floor(cellWidth),
+      Math.floor(cellHeight)
+    );
+  }
 
   // Update the texture with pixel-perfect rendering
   texture.minFilter = THREE.NearestFilter;
@@ -230,7 +350,7 @@ function paintPixelOnModel(mesh, intersect, color) {
   lastTemplateDataURL = null;
 
   // For debugging - show which grid cell was painted
-  console.log(`Painted grid cell [${gridX}, ${gridY}] on ${mesh.name}`);
+  console.log(`Painted grid cell [${gridX}, ${gridY}] on ${mesh.name}, face: ${faceIndex}`);
 }
 
 // Handle mouse events for pixel painting
@@ -267,6 +387,117 @@ window.addEventListener('mousemove', (event) => {
 
 window.addEventListener('mouseup', () => {
   isPainting = false;
+  // Ensure controls remain disabled in pixel mode even after painting
+  if (editingMode === 'pixel') {
+    controls.enabled = false;
+  }
+});
+
+// Multi-touch handling for rotation in pixel mode
+let touchStartPositions = [];
+let isMultiTouch = false;
+
+window.addEventListener('touchstart', (event) => {
+  // Store touch positions
+  touchStartPositions = [];
+  for (let i = 0; i < event.touches.length; i++) {
+    touchStartPositions.push({
+      x: event.touches[i].clientX,
+      y: event.touches[i].clientY
+    });
+  }
+
+  // If we have 2 or more touches and we're in pixel mode, enable multi-touch rotation
+  isMultiTouch = event.touches.length >= 2 && editingMode === 'pixel';
+
+  // If it's a single touch in pixel mode, handle it as a paint operation
+  if (event.touches.length === 1 && editingMode === 'pixel' && !isMultiTouch) {
+    const touch = event.touches[0];
+
+    mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects(parts);
+
+    if (intersects.length > 0) {
+      isPainting = true;
+      selectedMesh = intersects[0].object;
+      paintPixelOnModel(selectedMesh, intersects[0], colorPicker.value);
+    }
+
+    // Prevent default to avoid scrolling while painting
+    event.preventDefault();
+  }
+});
+
+window.addEventListener('touchmove', (event) => {
+  // If we're in multi-touch mode, handle rotation
+  if (isMultiTouch && event.touches.length >= 2) {
+    // Calculate the difference between the current and previous touch positions
+    const touch1 = event.touches[0];
+    const touch2 = event.touches[1];
+
+    const currentMidpoint = {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2
+    };
+
+    const previousMidpoint = {
+      x: (touchStartPositions[0].x + touchStartPositions[1].x) / 2,
+      y: (touchStartPositions[0].y + touchStartPositions[1].y) / 2
+    };
+
+    // Calculate rotation based on the movement of the midpoint
+    const rotationX = (currentMidpoint.x - previousMidpoint.x) * 0.01;
+    const rotationY = (currentMidpoint.y - previousMidpoint.y) * 0.01;
+
+    // Apply rotation to the camera
+    camera.position.x = Math.cos(rotationX) * camera.position.x - Math.sin(rotationX) * camera.position.z;
+    camera.position.z = Math.sin(rotationX) * camera.position.x + Math.cos(rotationX) * camera.position.z;
+    camera.position.y += rotationY;
+    camera.lookAt(scene.position);
+
+    // Update touch positions for the next move event
+    touchStartPositions = [];
+    for (let i = 0; i < event.touches.length; i++) {
+      touchStartPositions.push({
+        x: event.touches[i].clientX,
+        y: event.touches[i].clientY
+      });
+    }
+
+    // Prevent default to avoid scrolling while rotating
+    event.preventDefault();
+  }
+  // If we're painting with a single touch
+  else if (isPainting && editingMode === 'pixel' && event.touches.length === 1) {
+    const touch = event.touches[0];
+
+    mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+    mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+    const intersects = raycaster.intersectObjects([selectedMesh]);
+
+    if (intersects.length > 0) {
+      paintPixelOnModel(selectedMesh, intersects[0], colorPicker.value);
+    }
+
+    // Prevent default to avoid scrolling while painting
+    event.preventDefault();
+  }
+});
+
+window.addEventListener('touchend', (event) => {
+  // Reset painting and multi-touch flags
+  isPainting = false;
+  isMultiTouch = false;
+
+  // Ensure controls remain disabled in pixel mode
+  if (editingMode === 'pixel') {
+    controls.enabled = false;
+  }
 });
 
 // Regular click handler for color mode
@@ -334,6 +565,12 @@ window.addEventListener('click', (event) => {
       texture.magFilter = THREE.NearestFilter;
       texture.generateMipmaps = false; // Vypnout mipmapping pro ostřejší pixely
       texture.needsUpdate = true;
+
+      // Reset any face-specific pixel data when changing the entire part color
+      if (selectedMesh.userData.facePixels) {
+        // Clear the face pixels data to start fresh
+        selectedMesh.userData.facePixels = {};
+      }
 
       // Store the color
       localStorage.setItem(`part_${selectedMesh.name}`, colorValue);
@@ -704,12 +941,22 @@ const increaseBrushBtn = document.getElementById('increaseBrushBtn');
 // Initially hide brush controls
 document.getElementById('brushSizeControls').style.display = 'none';
 
+// Get rotation control buttons
+const rotateLeftBtn = document.getElementById('rotateLeftBtn');
+const rotateRightBtn = document.getElementById('rotateRightBtn');
+const rotateUpBtn = document.getElementById('rotateUpBtn');
+const rotateDownBtn = document.getElementById('rotateDownBtn');
+
 // Mode switching
 colorModeBtn.addEventListener('click', () => {
   editingMode = 'color';
   colorModeBtn.classList.add('active');
   pixelModeBtn.classList.remove('active');
   document.getElementById('brushSizeControls').style.display = 'none';
+  document.getElementById('rotationControls').style.display = 'none';
+
+  // Enable orbit controls in color mode
+  controls.enabled = true;
 });
 
 pixelModeBtn.addEventListener('click', () => {
@@ -717,6 +964,44 @@ pixelModeBtn.addEventListener('click', () => {
   pixelModeBtn.classList.add('active');
   colorModeBtn.classList.remove('active');
   document.getElementById('brushSizeControls').style.display = 'flex';
+  document.getElementById('rotationControls').style.display = 'flex';
+
+  // Disable orbit controls in pixel mode to prevent model movement during painting
+  // We'll handle rotation manually with buttons and multi-touch
+  controls.enabled = false;
+});
+
+// Initially hide rotation controls (we start in color mode)
+document.getElementById('rotationControls').style.display = 'none';
+
+// Rotation speed (in radians)
+const ROTATION_SPEED = 0.1;
+
+// Rotation control buttons
+rotateLeftBtn.addEventListener('click', () => {
+  camera.position.x = Math.cos(camera.position.z * ROTATION_SPEED) * camera.position.x -
+    Math.sin(camera.position.z * ROTATION_SPEED) * camera.position.z;
+  camera.position.z = Math.sin(camera.position.z * ROTATION_SPEED) * camera.position.x +
+    Math.cos(camera.position.z * ROTATION_SPEED) * camera.position.z;
+  camera.lookAt(scene.position);
+});
+
+rotateRightBtn.addEventListener('click', () => {
+  camera.position.x = Math.cos(-camera.position.z * ROTATION_SPEED) * camera.position.x -
+    Math.sin(-camera.position.z * ROTATION_SPEED) * camera.position.z;
+  camera.position.z = Math.sin(-camera.position.z * ROTATION_SPEED) * camera.position.x +
+    Math.cos(-camera.position.z * ROTATION_SPEED) * camera.position.z;
+  camera.lookAt(scene.position);
+});
+
+rotateUpBtn.addEventListener('click', () => {
+  camera.position.y += ROTATION_SPEED * 5;
+  camera.lookAt(scene.position);
+});
+
+rotateDownBtn.addEventListener('click', () => {
+  camera.position.y -= ROTATION_SPEED * 5;
+  camera.lookAt(scene.position);
 });
 
 // Brush size controls
