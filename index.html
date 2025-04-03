@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="cs">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Minecraft Skin Creator</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background-color: #f0f0f0;
+      font-family: Arial, sans-serif;
+    }
+
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      z-index: 10;
+      display: flex;
+      gap: 10px;
+      background-color: rgba(255, 255, 255, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+    }
+
+    button {
+      padding: 5px 10px;
+      cursor: pointer;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 3px;
+    }
+
+    button:hover {
+      background-color: #45a049;
+    }
+
+    #exportTemplateBtn {
+      background-color: #2196F3;
+    }
+
+    #exportTemplateBtn:hover {
+      background-color: #0b7dda;
+    }
+
+    input[type="color"] {
+      cursor: pointer;
+    }
+
+    #info {
+      position: absolute;
+      bottom: 10px;
+      left: 10px;
+      background-color: rgba(255, 255, 255, 0.7);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 14px;
+      max-width: 400px;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="controls">
+    <input type="color" id="colorPicker" value="#ff0000">
+    <button id="saveBtn">Uložit PNG</button>
+    <button id="exportTemplateBtn">Exportovat šablonu</button>
+  </div>
+
+  <div id="info">
+    <h3>Minecraft Skin Creator</h3>
+    <p>Klikněte na část postavy pro výběr a změňte barvu pomocí barevného výběru.</p>
+    <p>Tlačítko "Uložit PNG" uloží aktuální pohled.</p>
+    <p>Tlačítko "Exportovat šablonu" vytvoří 64x64 Minecraft skin šablonu.</p>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+
+</html>

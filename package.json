@@ -1,0 +1,24 @@
+{
+  "name": "minecraft-skin-creator",
+  "version": "1.0.0",
+  "description": "A Minecraft skin creator using Three.js",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": [
+    "three.js",
+    "minecraft",
+    "3d"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "three": "^0.165.0"
+  },
+  "devDependencies": {
+    "vite": "^5.1.4"
+  }
+}
