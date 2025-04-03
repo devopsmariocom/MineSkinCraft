@@ -5,8 +5,9 @@ import { PixelEditor } from './pixelEditor.js';
 // Scene setup
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(1); // Zajistí pixelově přesné vykreslování
 document.body.appendChild(renderer.domElement);
 
 // Controls
@@ -92,14 +93,18 @@ function createPart(name, x, y, z, w, h, d, color) {
     ctx.stroke();
   }
 
-  // Create texture from canvas
+  // Create texture from canvas with pixel-perfect settings
   const texture = new THREE.CanvasTexture(canvas);
+  texture.minFilter = THREE.NearestFilter;
+  texture.magFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false; // Vypnout mipmapping pro ostřejší pixely
   texture.needsUpdate = true;
 
   // Create material with the texture
   const material = new THREE.MeshStandardMaterial({
     map: texture,
-    color: 0xffffff // White color to not affect the texture
+    color: 0xffffff, // White color to not affect the texture
+    flatShading: true // Zajistí ostré hrany
   });
 
   const mesh = new THREE.Mesh(geometry, material);
@@ -201,11 +206,24 @@ function paintPixelOnModel(mesh, intersect, color) {
   const pixelX = gridX * cellWidth;
   const pixelY = gridY * cellHeight;
 
-  // Draw a filled rectangle for the grid cell
+  // Set the fill style to the selected color
   ctx.fillStyle = color;
-  ctx.fillRect(pixelX, pixelY, cellWidth, cellHeight);
 
-  // Update the texture
+  // Use crisp edges for pixel-perfect rendering
+  ctx.imageSmoothingEnabled = false;
+
+  // Draw a filled rectangle for the grid cell with pixel-perfect edges
+  ctx.fillRect(
+    Math.floor(pixelX),
+    Math.floor(pixelY),
+    Math.floor(cellWidth),
+    Math.floor(cellHeight)
+  );
+
+  // Update the texture with pixel-perfect rendering
+  texture.minFilter = THREE.NearestFilter;
+  texture.magFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false; // Vypnout mipmapping pro ostřejší pixely
   texture.needsUpdate = true;
 
   // Reset the template since we've made changes
@@ -310,6 +328,11 @@ window.addEventListener('click', (event) => {
         ctx.stroke();
       }
 
+      // Use pixel-perfect rendering
+      ctx.imageSmoothingEnabled = false;
+      texture.minFilter = THREE.NearestFilter;
+      texture.magFilter = THREE.NearestFilter;
+      texture.generateMipmaps = false; // Vypnout mipmapping pro ostřejší pixely
       texture.needsUpdate = true;
 
       // Store the color
@@ -340,6 +363,9 @@ function generateSkinTemplate() {
   canvas.width = 64;
   canvas.height = 64;
   const ctx = canvas.getContext('2d');
+
+  // Disable image smoothing for pixel-perfect rendering
+  ctx.imageSmoothingEnabled = false;
 
   // Fill with transparent background
   ctx.clearRect(0, 0, 64, 64);
@@ -420,6 +446,9 @@ function generateSkinTemplate() {
     tempCanvas.width = width;
     tempCanvas.height = height;
     const tempCtx = tempCanvas.getContext('2d');
+
+    // Disable image smoothing for pixel-perfect rendering
+    tempCtx.imageSmoothingEnabled = false;
 
     // Map the face index to the appropriate grid cells
     // This is a simplified mapping - in a real implementation, you'd use proper UV mapping
