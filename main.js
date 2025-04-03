@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { PixelEditor } from './pixelEditor.js';
 
 // Scene setup
 const scene = new THREE.Scene();
@@ -17,7 +18,14 @@ controls.dampingFactor = 0.05;
 const colorPicker = document.getElementById('colorPicker');
 const saveBtn = document.getElementById('saveBtn');
 const exportTemplateBtn = document.getElementById('exportTemplateBtn');
+const editPixelsBtn = document.getElementById('editPixelsBtn');
 let selectedMesh = null;
+
+// Initialize the pixel editor
+const pixelEditor = new PixelEditor();
+
+// Store the last generated template
+let lastTemplateDataURL = null;
 
 const parts = [];
 const partColors = {};
@@ -60,6 +68,9 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 window.addEventListener('click', (event) => {
+  // Ignore clicks if the pixel editor is open
+  if (document.getElementById('pixelEditorContainer').style.display === 'flex') return;
+
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
@@ -74,6 +85,9 @@ window.addEventListener('click', (event) => {
 
     // Update the color in our partColors object
     partColors[selectedMesh.name] = new THREE.Color(colorValue);
+
+    // Reset the last template since colors have changed
+    lastTemplateDataURL = null;
   }
 });
 
@@ -316,11 +330,35 @@ function generateSkinTemplate() {
 
 // Export template button event listener
 exportTemplateBtn.addEventListener('click', () => {
-  const templateDataURL = generateSkinTemplate();
+  // Generate a new template if we don't have one or if it's outdated
+  if (!lastTemplateDataURL) {
+    lastTemplateDataURL = generateSkinTemplate();
+  }
+
   const link = document.createElement('a');
   link.download = 'minecraft-skin-template.png';
-  link.href = templateDataURL;
+  link.href = lastTemplateDataURL;
   link.click();
+});
+
+// Edit pixels button event listener
+editPixelsBtn.addEventListener('click', () => {
+  // Generate a new template if we don't have one or if it's outdated
+  if (!lastTemplateDataURL) {
+    lastTemplateDataURL = generateSkinTemplate();
+  }
+
+  // Open the pixel editor with the template
+  pixelEditor.open(lastTemplateDataURL);
+});
+
+// Listen for save events from the pixel editor
+document.addEventListener('pixelEditorSave', (event) => {
+  // Update the template data URL
+  lastTemplateDataURL = event.detail.dataURL;
+
+  // Show a notification
+  alert('Šablona byla úspěšně upravena! Klikněte na "Exportovat šablonu" pro stažení.');
 });
 
 // Handle window resize
@@ -328,6 +366,30 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Add keyboard shortcuts
+window.addEventListener('keydown', (event) => {
+  // Only handle shortcuts if the pixel editor is open
+  if (document.getElementById('pixelEditorContainer').style.display !== 'flex') return;
+
+  // Ctrl+Z for undo
+  if (event.ctrlKey && event.key === 'z') {
+    event.preventDefault();
+    pixelEditor.undo();
+  }
+
+  // Ctrl+Y for redo
+  if (event.ctrlKey && event.key === 'y') {
+    event.preventDefault();
+    pixelEditor.redo();
+  }
+
+  // Escape to close the editor
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    pixelEditor.close();
+  }
 });
 
 // Animation loop

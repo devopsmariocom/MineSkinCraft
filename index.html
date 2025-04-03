@@ -4,62 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <title>Minecraft Skin Creator</title>
-  <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background-color: #f0f0f0;
-      font-family: Arial, sans-serif;
-    }
-
-    #controls {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 10;
-      display: flex;
-      gap: 10px;
-      background-color: rgba(255, 255, 255, 0.7);
-      padding: 10px;
-      border-radius: 5px;
-    }
-
-    button {
-      padding: 5px 10px;
-      cursor: pointer;
-      background-color: #4CAF50;
-      color: white;
-      border: none;
-      border-radius: 3px;
-    }
-
-    button:hover {
-      background-color: #45a049;
-    }
-
-    #exportTemplateBtn {
-      background-color: #2196F3;
-    }
-
-    #exportTemplateBtn:hover {
-      background-color: #0b7dda;
-    }
-
-    input[type="color"] {
-      cursor: pointer;
-    }
-
-    #info {
-      position: absolute;
-      bottom: 10px;
-      left: 10px;
-      background-color: rgba(255, 255, 255, 0.7);
-      padding: 10px;
-      border-radius: 5px;
-      font-size: 14px;
-      max-width: 400px;
-    }
-  </style>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 
 <body>
@@ -67,6 +13,7 @@
     <input type="color" id="colorPicker" value="#ff0000">
     <button id="saveBtn">Uložit PNG</button>
     <button id="exportTemplateBtn">Exportovat šablonu</button>
+    <button id="editPixelsBtn">Editovat pixely</button>
   </div>
 
   <div id="info">
@@ -74,6 +21,35 @@
     <p>Klikněte na část postavy pro výběr a změňte barvu pomocí barevného výběru.</p>
     <p>Tlačítko "Uložit PNG" uloží aktuální pohled.</p>
     <p>Tlačítko "Exportovat šablonu" vytvoří 64x64 Minecraft skin šablonu.</p>
+    <p>Tlačítko "Editovat pixely" otevře editor pro úpravu jednotlivých pixelů šablony.</p>
+  </div>
+
+  <!-- Pixel Editor Modal -->
+  <div id="pixelEditorContainer">
+    <div id="pixelSizeDisplay">Velikost: 64x64 pixelů</div>
+
+    <div id="pixelEditorControls">
+      <input type="color" id="editorColorPicker" value="#ff0000">
+      <div id="zoomControls">
+        <button id="zoomInBtn"><i class="fas fa-search-plus"></i></button>
+        <button id="zoomOutBtn"><i class="fas fa-search-minus"></i></button>
+        <button id="resetZoomBtn"><i class="fas fa-sync-alt"></i></button>
+      </div>
+      <button id="savePixelEditorBtn">Uložit změny</button>
+      <button id="closeEditorBtn">Zavřít editor</button>
+    </div>
+
+    <div id="pixelEditorWrapper">
+      <div id="toolsPanel">
+        <div class="tool active" data-tool="pencil"><i class="fas fa-pencil-alt"></i></div>
+        <div class="tool" data-tool="eraser"><i class="fas fa-eraser"></i></div>
+        <div class="tool" data-tool="eyedropper"><i class="fas fa-eye-dropper"></i></div>
+        <div class="tool" data-tool="fill"><i class="fas fa-fill-drip"></i></div>
+      </div>
+      <canvas id="pixelEditorCanvas" width="640" height="640"></canvas>
+    </div>
+
+    <div id="pixelCoordinates">Pozice: 0, 0</div>
   </div>
 
   <script type="module" src="/main.js"></script>

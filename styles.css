@@ -1,0 +1,171 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #f0f0f0;
+  font-family: Arial, sans-serif;
+}
+
+#controls {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  background-color: rgba(255, 255, 255, 0.7);
+  padding: 10px;
+  border-radius: 5px;
+}
+
+button {
+  padding: 5px 10px;
+  cursor: pointer;
+  background-color: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 3px;
+}
+
+button:hover {
+  background-color: #45a049;
+}
+
+#exportTemplateBtn {
+  background-color: #2196F3;
+}
+
+#exportTemplateBtn:hover {
+  background-color: #0b7dda;
+}
+
+#editPixelsBtn {
+  background-color: #ff9800;
+}
+
+#editPixelsBtn:hover {
+  background-color: #e68a00;
+}
+
+input[type="color"] {
+  cursor: pointer;
+}
+
+#info {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  background-color: rgba(255, 255, 255, 0.7);
+  padding: 10px;
+  border-radius: 5px;
+  font-size: 14px;
+  max-width: 400px;
+}
+
+/* Pixel Editor Styles */
+#pixelEditorContainer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 100;
+  flex-direction: column;
+}
+
+#pixelEditorControls {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 10px;
+  border-radius: 5px;
+}
+
+#pixelEditorCanvas {
+  background-color: #fff;
+  border: 1px solid #ccc;
+  cursor: crosshair;
+}
+
+#pixelEditorWrapper {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+#zoomControls {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 10px;
+}
+
+#pixelSizeDisplay {
+  color: white;
+  margin-bottom: 5px;
+}
+
+#closeEditorBtn {
+  background-color: #f44336;
+}
+
+#closeEditorBtn:hover {
+  background-color: #d32f2f;
+}
+
+#savePixelEditorBtn {
+  background-color: #4CAF50;
+}
+
+#savePixelEditorBtn:hover {
+  background-color: #45a049;
+}
+
+#toolsPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 10px;
+  border-radius: 5px;
+  position: absolute;
+  left: -60px;
+  top: 0;
+}
+
+.tool {
+  width: 40px;
+  height: 40px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  background-color: #fff;
+}
+
+.tool.active {
+  background-color: #e0e0e0;
+  border: 2px solid #2196F3;
+}
+
+.tool i {
+  font-size: 20px;
+}
+
+#editorColorPicker {
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border: none;
+  cursor: pointer;
+}
+
+#pixelCoordinates {
+  color: white;
+  margin-top: 5px;
+  font-size: 12px;
+}
