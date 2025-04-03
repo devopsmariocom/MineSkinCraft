@@ -33,15 +33,47 @@ const partColors = {};
 function createPart(name, x, y, z, w, h, d, color) {
   const geometry = new THREE.BoxGeometry(w, h, d);
   const savedColor = localStorage.getItem(`part_${name}`);
-  const material = new THREE.MeshStandardMaterial({ color: savedColor || color });
+
+  // Create a canvas texture for this part
+  const textureSize = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = textureSize;
+  canvas.height = textureSize;
+  const ctx = canvas.getContext('2d');
+
+  // Fill with the base color
+  ctx.fillStyle = savedColor || `#${color.toString(16).padStart(6, '0')}`;
+  ctx.fillRect(0, 0, textureSize, textureSize);
+
+  // Create texture from canvas
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.needsUpdate = true;
+
+  // Create material with the texture
+  const material = new THREE.MeshStandardMaterial({
+    map: texture,
+    color: 0xffffff // White color to not affect the texture
+  });
+
   const mesh = new THREE.Mesh(geometry, material);
   mesh.position.set(x, y, z);
   mesh.name = name;
+
+  // Store the canvas and context for later pixel editing
+  mesh.userData = {
+    canvas: canvas,
+    context: ctx,
+    texture: texture,
+    baseColor: savedColor ? new THREE.Color(savedColor) : new THREE.Color(color)
+  };
+
   scene.add(mesh);
   parts.push(mesh);
 
   // Store the color for template generation
   partColors[name] = savedColor ? new THREE.Color(savedColor) : new THREE.Color(color);
+
+  return mesh;
 }
 
 // Create character parts
@@ -67,9 +99,85 @@ camera.position.z = 5;
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
+// Variables for pixel painting
+let isPainting = false;
+let currentBrushSize = 2;
+let editingMode = 'color'; // 'color' or 'pixel'
+
+// Function to paint a pixel on the 3D model
+function paintPixelOnModel(mesh, intersect, color) {
+  if (!mesh || !mesh.userData.canvas) return;
+
+  // Get the UV coordinates at the intersection point
+  const uv = intersect.uv;
+  if (!uv) return;
+
+  const canvas = mesh.userData.canvas;
+  const ctx = mesh.userData.context;
+  const texture = mesh.userData.texture;
+
+  // Convert UV coordinates to pixel coordinates
+  const x = Math.floor(uv.x * canvas.width);
+  const y = Math.floor((1 - uv.y) * canvas.height);
+
+  // Draw a pixel at the intersection point
+  ctx.fillStyle = color;
+
+  // Draw a circle with the current brush size
+  ctx.beginPath();
+  ctx.arc(x, y, currentBrushSize, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Update the texture
+  texture.needsUpdate = true;
+
+  // Reset the template since we've made changes
+  lastTemplateDataURL = null;
+}
+
+// Handle mouse events for pixel painting
+window.addEventListener('mousedown', (event) => {
+  // Only handle if we're in pixel editing mode
+  if (editingMode !== 'pixel') return;
+
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects(parts);
+
+  if (intersects.length > 0) {
+    isPainting = true;
+    selectedMesh = intersects[0].object;
+    paintPixelOnModel(selectedMesh, intersects[0], colorPicker.value);
+  }
+});
+
+window.addEventListener('mousemove', (event) => {
+  if (!isPainting || editingMode !== 'pixel') return;
+
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  raycaster.setFromCamera(mouse, camera);
+  const intersects = raycaster.intersectObjects([selectedMesh]);
+
+  if (intersects.length > 0) {
+    paintPixelOnModel(selectedMesh, intersects[0], colorPicker.value);
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  isPainting = false;
+});
+
+// Regular click handler for color mode
 window.addEventListener('click', (event) => {
   // Ignore clicks if the pixel editor is open
   if (document.getElementById('pixelEditorContainer').style.display === 'flex') return;
+
+  // If we're in pixel editing mode, this is handled by the mousedown/move/up events
+  if (editingMode === 'pixel') return;
 
   mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
   mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -79,15 +187,30 @@ window.addEventListener('click', (event) => {
 
   if (intersects.length > 0) {
     selectedMesh = intersects[0].object;
-    const colorValue = colorPicker.value;
-    selectedMesh.material.color.set(colorValue);
-    localStorage.setItem(`part_${selectedMesh.name}`, colorValue);
 
-    // Update the color in our partColors object
-    partColors[selectedMesh.name] = new THREE.Color(colorValue);
+    if (editingMode === 'color') {
+      // In color mode, change the entire part color
+      const colorValue = colorPicker.value;
 
-    // Reset the last template since colors have changed
-    lastTemplateDataURL = null;
+      // Update the canvas with the new color
+      const canvas = selectedMesh.userData.canvas;
+      const ctx = selectedMesh.userData.context;
+      const texture = selectedMesh.userData.texture;
+
+      ctx.fillStyle = colorValue;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      texture.needsUpdate = true;
+
+      // Store the color
+      localStorage.setItem(`part_${selectedMesh.name}`, colorValue);
+
+      // Update the color in our partColors object
+      partColors[selectedMesh.name] = new THREE.Color(colorValue);
+      selectedMesh.userData.baseColor = new THREE.Color(colorValue);
+
+      // Reset the last template since colors have changed
+      lastTemplateDataURL = null;
+    }
   }
 });
 
@@ -158,121 +281,176 @@ function generateSkinTemplate() {
 
   // ===== HEAD =====
   // According to the description: Head is 8x8 pixels at position [8-16, 8-16]
-  const headColor = partColors.hlava;
+  const headMesh = parts.find(part => part.name === "hlava");
+
+  // Helper function to draw texture from mesh
+  function drawTextureFromMesh(mesh, x, y, width, height, faceIndex = 0) {
+    if (!mesh || !mesh.userData.canvas) {
+      // Fallback to base color if no texture
+      const color = partColors[mesh.name];
+      drawFace(x, y, width, height, color);
+      return;
+    }
+
+    // Get the texture from the mesh
+    const sourceCanvas = mesh.userData.canvas;
+    const sourceCtx = sourceCanvas.getContext('2d');
+
+    // Get a portion of the texture based on the face index
+    // This is a simplified approach - in a real implementation, you'd map UV coordinates properly
+    const faceWidth = sourceCanvas.width / 3;
+    const faceHeight = sourceCanvas.height / 2;
+    const sourceX = (faceIndex % 3) * faceWidth;
+    const sourceY = Math.floor(faceIndex / 3) * faceHeight;
+
+    // Get the image data for this face
+    const imageData = sourceCtx.getImageData(sourceX, sourceY, faceWidth, faceHeight);
+
+    // Create a temporary canvas to scale the face
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = width;
+    tempCanvas.height = height;
+    const tempCtx = tempCanvas.getContext('2d');
+
+    // Create a temporary ImageData object
+    const tempImageData = tempCtx.createImageData(width, height);
+
+    // Simple scaling algorithm
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const sourceX = Math.floor(x * faceWidth / width);
+        const sourceY = Math.floor(y * faceHeight / height);
+
+        const sourceIndex = (sourceY * faceWidth + sourceX) * 4;
+        const targetIndex = (y * width + x) * 4;
+
+        tempImageData.data[targetIndex] = imageData.data[sourceIndex];
+        tempImageData.data[targetIndex + 1] = imageData.data[sourceIndex + 1];
+        tempImageData.data[targetIndex + 2] = imageData.data[sourceIndex + 2];
+        tempImageData.data[targetIndex + 3] = imageData.data[sourceIndex + 3];
+      }
+    }
+
+    // Put the scaled image data on the temporary canvas
+    tempCtx.putImageData(tempImageData, 0, 0);
+
+    // Draw the temporary canvas onto the main canvas
+    ctx.drawImage(tempCanvas, x, y);
+  }
 
   // Head - front face (8x8 pixels)
-  drawFace(8, 8, 8, 8, headColor, { type: 'eyes', color: '#000000' });
+  drawTextureFromMesh(headMesh, 8, 8, 8, 8, 0);
 
   // Head - top face
-  drawFace(8, 0, 8, 8, headColor);
+  drawTextureFromMesh(headMesh, 8, 0, 8, 8, 1);
 
   // Head - right side
-  drawFace(0, 8, 8, 8, headColor);
+  drawTextureFromMesh(headMesh, 0, 8, 8, 8, 2);
 
   // Head - bottom face
-  drawFace(16, 0, 8, 8, headColor);
+  drawTextureFromMesh(headMesh, 16, 0, 8, 8, 3);
 
   // Head - back face
-  drawFace(24, 8, 8, 8, headColor);
+  drawTextureFromMesh(headMesh, 24, 8, 8, 8, 4);
 
   // Head - left side
-  drawFace(16, 8, 8, 8, headColor);
+  drawTextureFromMesh(headMesh, 16, 8, 8, 8, 5);
 
   // ===== BODY =====
   // According to the description: Body is 8x12 pixels at position [20-28, 20-32]
-  const bodyColor = partColors.telo;
+  const bodyMesh = parts.find(part => part.name === "telo");
 
   // Body - front
-  drawFace(20, 20, 8, 12, bodyColor);
+  drawTextureFromMesh(bodyMesh, 20, 20, 8, 12, 0);
 
   // Body - back
-  drawFace(32, 20, 8, 12, bodyColor);
+  drawTextureFromMesh(bodyMesh, 32, 20, 8, 12, 1);
 
   // ===== ARMS =====
   // Left arm (4x12 pixels) at position [44-48, 20-32]
-  const leftArmColor = partColors.rukaL;
+  const leftArmMesh = parts.find(part => part.name === "rukaL");
 
   // Left arm - front
-  drawFace(44, 20, 4, 12, leftArmColor);
+  drawTextureFromMesh(leftArmMesh, 44, 20, 4, 12, 0);
 
   // Left arm - outer side
-  drawFace(48, 20, 4, 12, leftArmColor);
+  drawTextureFromMesh(leftArmMesh, 48, 20, 4, 12, 1);
 
   // Left arm - back
-  drawFace(52, 20, 4, 12, leftArmColor);
+  drawTextureFromMesh(leftArmMesh, 52, 20, 4, 12, 2);
 
   // Left arm - inner side
-  drawFace(40, 20, 4, 12, leftArmColor);
+  drawTextureFromMesh(leftArmMesh, 40, 20, 4, 12, 3);
 
   // Left arm - top
-  drawFace(44, 16, 4, 4, leftArmColor);
+  drawTextureFromMesh(leftArmMesh, 44, 16, 4, 4, 4);
 
   // Left arm - bottom
-  drawFace(48, 16, 4, 4, leftArmColor);
+  drawTextureFromMesh(leftArmMesh, 48, 16, 4, 4, 5);
 
   // Right arm (4x12 pixels) at position [36-40, 52-64]
-  const rightArmColor = partColors.rukaP;
+  const rightArmMesh = parts.find(part => part.name === "rukaP");
 
   // Right arm - front
-  drawFace(36, 52, 4, 12, rightArmColor);
+  drawTextureFromMesh(rightArmMesh, 36, 52, 4, 12, 0);
 
   // Right arm - outer side
-  drawFace(32, 52, 4, 12, rightArmColor);
+  drawTextureFromMesh(rightArmMesh, 32, 52, 4, 12, 1);
 
   // Right arm - back
-  drawFace(44, 52, 4, 12, rightArmColor);
+  drawTextureFromMesh(rightArmMesh, 44, 52, 4, 12, 2);
 
   // Right arm - inner side
-  drawFace(40, 52, 4, 12, rightArmColor);
+  drawTextureFromMesh(rightArmMesh, 40, 52, 4, 12, 3);
 
   // Right arm - top
-  drawFace(36, 48, 4, 4, rightArmColor);
+  drawTextureFromMesh(rightArmMesh, 36, 48, 4, 4, 4);
 
   // Right arm - bottom
-  drawFace(40, 48, 4, 4, rightArmColor);
+  drawTextureFromMesh(rightArmMesh, 40, 48, 4, 4, 5);
 
   // ===== LEGS =====
   // Left leg (4x12 pixels) at position [4-8, 20-32]
-  const leftLegColor = partColors.nohaL;
+  const leftLegMesh = parts.find(part => part.name === "nohaL");
 
   // Left leg - front
-  drawFace(4, 20, 4, 12, leftLegColor);
+  drawTextureFromMesh(leftLegMesh, 4, 20, 4, 12, 0);
 
   // Left leg - outer side
-  drawFace(8, 20, 4, 12, leftLegColor);
+  drawTextureFromMesh(leftLegMesh, 8, 20, 4, 12, 1);
 
   // Left leg - back
-  drawFace(12, 20, 4, 12, leftLegColor);
+  drawTextureFromMesh(leftLegMesh, 12, 20, 4, 12, 2);
 
   // Left leg - inner side
-  drawFace(0, 20, 4, 12, leftLegColor);
+  drawTextureFromMesh(leftLegMesh, 0, 20, 4, 12, 3);
 
   // Left leg - top
-  drawFace(4, 16, 4, 4, leftLegColor);
+  drawTextureFromMesh(leftLegMesh, 4, 16, 4, 4, 4);
 
   // Left leg - bottom
-  drawFace(8, 16, 4, 4, leftLegColor);
+  drawTextureFromMesh(leftLegMesh, 8, 16, 4, 4, 5);
 
   // Right leg (4x12 pixels) at position [20-24, 52-64]
-  const rightLegColor = partColors.nohaP;
+  const rightLegMesh = parts.find(part => part.name === "nohaP");
 
   // Right leg - front
-  drawFace(20, 52, 4, 12, rightLegColor);
+  drawTextureFromMesh(rightLegMesh, 20, 52, 4, 12, 0);
 
   // Right leg - outer side
-  drawFace(16, 52, 4, 12, rightLegColor);
+  drawTextureFromMesh(rightLegMesh, 16, 52, 4, 12, 1);
 
   // Right leg - back
-  drawFace(28, 52, 4, 12, rightLegColor);
+  drawTextureFromMesh(rightLegMesh, 28, 52, 4, 12, 2);
 
   // Right leg - inner side
-  drawFace(24, 52, 4, 12, rightLegColor);
+  drawTextureFromMesh(rightLegMesh, 24, 52, 4, 12, 3);
 
   // Right leg - top
-  drawFace(20, 48, 4, 4, rightLegColor);
+  drawTextureFromMesh(rightLegMesh, 20, 48, 4, 4, 4);
 
   // Right leg - bottom
-  drawFace(24, 48, 4, 4, rightLegColor);
+  drawTextureFromMesh(rightLegMesh, 24, 48, 4, 4, 5);
 
   // ===== OVERLAY LAYERS =====
   // These are the second layers that allow for details like armor, clothing, etc.
@@ -341,7 +519,47 @@ exportTemplateBtn.addEventListener('click', () => {
   link.click();
 });
 
-// Edit pixels button event listener
+// Mode switching buttons
+const colorModeBtn = document.getElementById('colorModeBtn');
+const pixelModeBtn = document.getElementById('pixelModeBtn');
+const brushSizeDisplay = document.getElementById('brushSizeDisplay');
+const decreaseBrushBtn = document.getElementById('decreaseBrushBtn');
+const increaseBrushBtn = document.getElementById('increaseBrushBtn');
+
+// Initially hide brush controls
+document.getElementById('brushSizeControls').style.display = 'none';
+
+// Mode switching
+colorModeBtn.addEventListener('click', () => {
+  editingMode = 'color';
+  colorModeBtn.classList.add('active');
+  pixelModeBtn.classList.remove('active');
+  document.getElementById('brushSizeControls').style.display = 'none';
+});
+
+pixelModeBtn.addEventListener('click', () => {
+  editingMode = 'pixel';
+  pixelModeBtn.classList.add('active');
+  colorModeBtn.classList.remove('active');
+  document.getElementById('brushSizeControls').style.display = 'flex';
+});
+
+// Brush size controls
+decreaseBrushBtn.addEventListener('click', () => {
+  if (currentBrushSize > 1) {
+    currentBrushSize--;
+    brushSizeDisplay.textContent = `${currentBrushSize}px`;
+  }
+});
+
+increaseBrushBtn.addEventListener('click', () => {
+  if (currentBrushSize < 10) {
+    currentBrushSize++;
+    brushSizeDisplay.textContent = `${currentBrushSize}px`;
+  }
+});
+
+// Edit template button event listener (renamed from editPixelsBtn)
 editPixelsBtn.addEventListener('click', () => {
   // Generate a new template if we don't have one or if it's outdated
   if (!lastTemplateDataURL) {

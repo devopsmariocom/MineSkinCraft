@@ -11,17 +11,27 @@
 <body>
   <div id="controls">
     <input type="color" id="colorPicker" value="#ff0000">
+    <div id="brushSizeControls">
+      <button id="decreaseBrushBtn">-</button>
+      <span id="brushSizeDisplay">2px</span>
+      <button id="increaseBrushBtn">+</button>
+    </div>
+    <div id="editModeControls">
+      <button id="colorModeBtn" class="active">Režim barev</button>
+      <button id="pixelModeBtn">Režim pixelů</button>
+    </div>
     <button id="saveBtn">Uložit PNG</button>
     <button id="exportTemplateBtn">Exportovat šablonu</button>
-    <button id="editPixelsBtn">Editovat pixely</button>
+    <button id="editPixelsBtn">Editovat šablonu</button>
   </div>
 
   <div id="info">
     <h3>Minecraft Skin Creator</h3>
-    <p>Klikněte na část postavy pro výběr a změňte barvu pomocí barevného výběru.</p>
+    <p><strong>Režim barev:</strong> Klikněte na část postavy pro výběr a změňte barvu pomocí barevného výběru.</p>
+    <p><strong>Režim pixelů:</strong> Kreslete přímo na 3D model pomocí štětce. Velikost štětce můžete měnit pomocí tlačítek + a -.</p>
     <p>Tlačítko "Uložit PNG" uloží aktuální pohled.</p>
     <p>Tlačítko "Exportovat šablonu" vytvoří 64x64 Minecraft skin šablonu.</p>
-    <p>Tlačítko "Editovat pixely" otevře editor pro úpravu jednotlivých pixelů šablony.</p>
+    <p>Tlačítko "Editovat šablonu" otevře editor pro úpravu celé šablony skinu.</p>
   </div>
 
   <!-- Pixel Editor Modal -->

@@ -11,10 +11,12 @@ body {
   left: 10px;
   z-index: 10;
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
   background-color: rgba(255, 255, 255, 0.7);
   padding: 10px;
   border-radius: 5px;
+  max-width: 600px;
 }
 
 button {
@@ -28,6 +30,11 @@ button {
 
 button:hover {
   background-color: #45a049;
+}
+
+button.active {
+  background-color: #2196F3;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.3);
 }
 
 #exportTemplateBtn {
@@ -46,8 +53,54 @@ button:hover {
   background-color: #e68a00;
 }
 
+#brushSizeControls {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#brushSizeDisplay {
+  min-width: 30px;
+  text-align: center;
+}
+
+#decreaseBrushBtn,
+#increaseBrushBtn {
+  width: 25px;
+  height: 25px;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+#editModeControls {
+  display: flex;
+  gap: 5px;
+}
+
+#colorModeBtn {
+  background-color: #9c27b0;
+}
+
+#colorModeBtn:hover,
+#colorModeBtn.active {
+  background-color: #7b1fa2;
+}
+
+#pixelModeBtn {
+  background-color: #ff5722;
+}
+
+#pixelModeBtn:hover,
+#pixelModeBtn.active {
+  background-color: #e64a19;
+}
+
 input[type="color"] {
   cursor: pointer;
+  width: 40px;
+  height: 30px;
 }
 
 #info {
